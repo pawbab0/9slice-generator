@@ -292,12 +292,50 @@ border-image-repeat: stretch;`;
     });
   });
 
-  // Export PNG
+  // Export PNG (Exact 1:1 dimension requested by user)
   btnExportPng.addEventListener('click', () => {
+    const dim = parseInt(inputDimension.value, 10) || 64;
+    const bgColor = inputBgColor.value;
+    const radius = parseInt(inputRadius.value, 10) || 0;
+    const bWidth = parseInt(inputBorderWidth.value, 10) || 0;
+    const bColor = inputBorderColor.value;
+    const hasShadow = chkShadow.checked;
+
+    // Create offscreen canvas with EXACT 1:1 pixel dimensions
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = dim;
+    exportCanvas.height = dim;
+    const ctx = exportCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    if (hasShadow) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 4;
+    }
+
+    const halfBorder = bWidth > 0 ? bWidth / 2 : 0;
+    drawRoundRect(
+      ctx,
+      halfBorder,
+      halfBorder,
+      dim - bWidth,
+      dim - bWidth,
+      radius,
+      bgColor,
+      bWidth > 0 ? bColor : null,
+      bWidth
+    );
+
+    if (hasShadow) {
+      ctx.restore();
+    }
+
     const link = document.createElement('a');
-    const dim = inputDimension.value;
     link.download = `9slice_${dim}x${dim}.png`;
-    link.href = baseCanvas.toDataURL('image/png');
+    link.href = exportCanvas.toDataURL('image/png');
     link.click();
   });
 
