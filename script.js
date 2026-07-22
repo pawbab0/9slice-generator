@@ -36,23 +36,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Buttons
   const btnExportPng = document.getElementById('btnExportPng');
-  const btnExportPdf = document.getElementById('btnExportPdf');
+  const btnExportSvg = document.getElementById('btnExportSvg');
   const btnCopyCss = document.getElementById('btnCopyCss');
 
-  // Helper to draw smooth rounded rect with subpixel precision
+  // Helper to draw smooth rounded rect with vector arcTo precision
   function drawRoundRect(ctx, x, y, width, height, radius, fillStyle, strokeStyle, strokeWidth) {
     radius = Math.min(radius, width / 2, height / 2);
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.arcTo(x + width, y, x + width, y + height, radius);
+    ctx.arcTo(x + width, y + height, x, y + height, radius);
+    ctx.arcTo(x, y + height, x, y, radius);
+    ctx.arcTo(x, y, x + width, y, radius);
     ctx.closePath();
 
     if (fillStyle) {
@@ -68,10 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Draw 9-slice onto target canvas with high quality smoothing
-  function render9Slice(srcCanvas, destCanvas, inset) {
+  function render9Slice(srcCanvas, destCanvas, inset, srcW_orig, srcH_orig) {
     const dCtx = destCanvas.getContext('2d');
-    const srcW = srcCanvas.width;
-    const srcH = srcCanvas.height;
     const destW = destCanvas.width;
     const destH = destCanvas.height;
 
@@ -82,41 +76,51 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clear destination
     dCtx.clearRect(0, 0, destW, destH);
 
+    const srcW = srcCanvas.width;
+    const srcH = srcCanvas.height;
+    const scaleX = srcW / srcW_orig;
+    const scaleY = srcH / srcH_orig;
+
     // Safeguard inset bounds
-    const safeInset = Math.min(inset, Math.floor(srcW / 2) - 1, Math.floor(srcH / 2) - 1);
+    const safeInset = Math.min(inset, Math.floor(srcW_orig / 2) - 1, Math.floor(srcH_orig / 2) - 1);
     if (safeInset <= 0) return;
 
-    const sL = safeInset;
-    const sR = safeInset;
-    const sT = safeInset;
-    const sB = safeInset;
+    const sL = safeInset * scaleX;
+    const sR = safeInset * scaleX;
+    const sT = safeInset * scaleY;
+    const sB = safeInset * scaleY;
 
     const sMidW = srcW - sL - sR;
     const sMidH = srcH - sT - sB;
 
-    const dMidW = destW - sL - sR;
-    const dMidH = destH - sT - sB;
+    const dL = safeInset * (destW / (canvas1x1.dataset.logicalW || 160));
+    const dR = dL;
+    const dT = safeInset * (destH / (canvas1x1.dataset.logicalH || 160));
+    const dB = dT;
+
+    const dMidW = destW - dL - dR;
+    const dMidH = destH - dT - dB;
 
     // 1. Top-Left
-    dCtx.drawImage(srcCanvas, 0, 0, sL, sT, 0, 0, sL, sT);
+    dCtx.drawImage(srcCanvas, 0, 0, sL, sT, 0, 0, dL, dT);
     // 2. Top-Center
-    dCtx.drawImage(srcCanvas, sL, 0, sMidW, sT, sL, 0, dMidW, sT);
+    dCtx.drawImage(srcCanvas, sL, 0, sMidW, sT, dL, 0, dMidW, dT);
     // 3. Top-Right
-    dCtx.drawImage(srcCanvas, srcW - sR, 0, sR, sT, destW - sR, 0, sR, sT);
+    dCtx.drawImage(srcCanvas, srcW - sR, 0, sR, sT, destW - dR, 0, dR, dT);
 
     // 4. Middle-Left
-    dCtx.drawImage(srcCanvas, 0, sT, sL, sMidH, 0, sT, sL, dMidH);
+    dCtx.drawImage(srcCanvas, 0, sT, sL, sMidH, 0, dT, dL, dMidH);
     // 5. Middle-Center
-    dCtx.drawImage(srcCanvas, sL, sT, sMidW, sMidH, sL, sT, dMidW, dMidH);
+    dCtx.drawImage(srcCanvas, sL, sT, sMidW, sMidH, dL, dT, dMidW, dMidH);
     // 6. Middle-Right
-    dCtx.drawImage(srcCanvas, srcW - sR, sT, sR, sMidH, destW - sR, sT, sR, dMidH);
+    dCtx.drawImage(srcCanvas, srcW - sR, sT, sR, sMidH, destW - dR, dT, dR, dMidH);
 
     // 7. Bottom-Left
-    dCtx.drawImage(srcCanvas, 0, srcH - sB, sL, sB, 0, destH - sB, sL, sB);
+    dCtx.drawImage(srcCanvas, 0, srcH - sB, sL, sB, 0, destH - dB, dL, dB);
     // 8. Bottom-Center
-    dCtx.drawImage(srcCanvas, sL, srcH - sB, sMidW, sB, sL, destH - sB, dMidW, sB);
+    dCtx.drawImage(srcCanvas, sL, srcH - sB, sMidW, sB, dL, destH - dB, dMidW, dB);
     // 9. Bottom-Right
-    dCtx.drawImage(srcCanvas, srcW - sR, srcH - sB, sR, sB, destW - sR, destH - sB, sR, sB);
+    dCtx.drawImage(srcCanvas, srcW - sR, srcH - sB, sR, sB, destW - dR, destH - dB, dR, dB);
   }
 
   // Main Render Update
@@ -150,40 +154,43 @@ document.addEventListener('DOMContentLoaded', () => {
     const centerH = Math.max(0, h - 2 * inset);
     metricCenter.textContent = `${centerW} × ${centerH} px`;
 
-    // Resize Base Canvas
-    baseCanvas.width = w;
-    baseCanvas.height = h;
+    // HiDPI Supersampling multiplier (4x for razor sharp curves on screen)
+    const superScale = 4;
+    baseCanvas.width = w * superScale;
+    baseCanvas.height = h * superScale;
 
     const ctx = baseCanvas.getContext('2d');
-    ctx.clearRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
 
     // Optional Shadow
     if (hasShadow) {
       ctx.save();
       ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetY = 4;
+      ctx.shadowBlur = 8 * superScale;
+      ctx.shadowOffsetY = 4 * superScale;
     }
 
-    // Draw base shape
-    const halfBorder = bWidth > 0 ? bWidth / 2 : 0;
+    // Draw base shape at 4x resolution
+    const halfBorder = bWidth > 0 ? (bWidth / 2) * superScale : 0;
     drawRoundRect(
       ctx,
       halfBorder,
       halfBorder,
-      w - bWidth,
-      h - bWidth,
-      radius,
+      (w - bWidth) * superScale,
+      (h - bWidth) * superScale,
+      radius * superScale,
       bgColor,
       bWidth > 0 ? bColor : null,
-      bWidth
+      bWidth * superScale
     );
 
     if (hasShadow) {
       ctx.restore();
     }
 
-    // Scale display canvas for base preview (Zoom factor for visual comfort)
+    // Scale display canvas for base preview
     const maxDisplaySize = 180;
     const displayScale = Math.min(maxDisplaySize / w, maxDisplaySize / h, 3);
     const displayW = Math.round(w * displayScale);
@@ -212,10 +219,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Position Cell Labels
     positionGridCells(displayW, displayH, scaledInsetX, scaledInsetY);
 
-    // Render Scaling Previews (1:1, 16:9, 9:16)
-    render9Slice(baseCanvas, canvas1x1, inset);
-    render9Slice(baseCanvas, canvas16x9, inset);
-    render9Slice(baseCanvas, canvas9x16, inset);
+    // Render HiDPI Previews (2x DPR resolution for crisp previews)
+    setupHiDpiCanvas(canvas1x1, 160, 160);
+    setupHiDpiCanvas(canvas16x9, 320, 180);
+    setupHiDpiCanvas(canvas9x16, 180, 320);
+
+    render9Slice(baseCanvas, canvas1x1, inset, w, h);
+    render9Slice(baseCanvas, canvas16x9, inset, w, h);
+    render9Slice(baseCanvas, canvas9x16, inset, w, h);
 
     // Update CSS Code snippet
     codeCss.textContent = `/* CSS Border-Image Specification */
@@ -223,6 +234,15 @@ border-image-source: url('9slice-image.png');
 border-image-slice: ${inset} fill;
 border-image-width: ${inset}px;
 border-image-repeat: stretch;`;
+  }
+
+  // Helper for HiDPI setup of preview canvases
+  function setupHiDpiCanvas(canvas, logicalW, logicalH) {
+    const dpr = 2;
+    canvas.dataset.logicalW = logicalW;
+    canvas.dataset.logicalH = logicalH;
+    canvas.width = logicalW * dpr;
+    canvas.height = logicalH * dpr;
   }
 
   // Helper to position labels TL, T, TR...
@@ -291,127 +311,48 @@ border-image-repeat: stretch;`;
     });
   });
 
-  // Export PDF with jsPDF
-  btnExportPdf.addEventListener('click', () => {
-    if (!window.jspdf) {
-      alert('Biblioteka PDF nie została jeszcze załadowana.');
-      return;
+  // Export SVG
+  btnExportSvg.addEventListener('click', () => {
+    const dim = parseInt(inputDimension.value, 10) || 64;
+    const bgColor = inputBgColor.value;
+    const radius = parseInt(inputRadius.value, 10) || 0;
+    const bWidth = parseInt(inputBorderWidth.value, 10) || 0;
+    const bColor = inputBorderColor.value;
+    const hasShadow = chkShadow.checked;
+
+    const halfBorder = bWidth > 0 ? bWidth / 2 : 0;
+    const rectW = dim - bWidth;
+    const rectH = dim - bWidth;
+    const r = Math.min(radius, rectW / 2, rectH / 2);
+
+    let filterDef = '';
+    let filterAttr = '';
+
+    if (hasShadow) {
+      filterDef = `
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>`;
+      filterAttr = ' filter="url(#shadow)"';
     }
 
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    });
+    const strokeAttr = bWidth > 0 ? ` stroke="${bColor}" stroke-width="${bWidth}"` : '';
 
-    // Dark PDF styling or clean professional printable styling
-    pdf.setFillColor(15, 23, 42); // #0f172a
-    pdf.rect(0, 0, 210, 297, 'F');
+    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${dim}" height="${dim}" viewBox="0 0 ${dim} ${dim}">
+${filterDef}
+  <rect x="${halfBorder}" y="${halfBorder}" width="${rectW}" height="${rectH}" rx="${r}" ry="${r}" fill="${bgColor}"${strokeAttr}${filterAttr}/>
+</svg>`;
 
-    // Title Header
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(22);
-    pdf.text('Specyfikacja Grafiki 9-Slice', 20, 25);
-
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(148, 163, 184); // #94a3b8
-    pdf.text(`Wygenerowano: ${new Date().toLocaleString('pl-PL')}`, 20, 32);
-
-    // Divider Line
-    pdf.setDrawColor(46, 61, 91);
-    pdf.setLineWidth(0.5);
-    pdf.line(20, 36, 190, 36);
-
-    // Section 1: Parameters Table
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(255, 255, 255);
-    pdf.text('Parametry techniczne', 20, 48);
-
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(203, 213, 225);
-
-    const dimVal = inputDimension.value;
-    const params = [
-      ['Rozmiar bazowy:', `${dimVal} × ${dimVal} px`],
-      ['Kolor tła:', `${inputBgColor.value.toUpperCase()}`],
-      ['Zaokrąglenie (Radius):', `${inputRadius.value} px`],
-      ['Margines cięcia (Slice Inset):', `${inputSliceInset.value} px`],
-      ['Obramowanie:', `${inputBorderWidth.value} px (${inputBorderColor.value.toUpperCase()})`]
-    ];
-
-    let startY = 56;
-    params.forEach(([label, val]) => {
-      pdf.setTextColor(148, 163, 184);
-      pdf.text(label, 25, startY);
-      pdf.setTextColor(96, 165, 250);
-      pdf.text(val, 85, startY);
-      startY += 7;
-    });
-
-    // Section 2: Base Image & Slice Breakdown
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(255, 255, 255);
-    pdf.text('Obraz źródłowy 9-Slice (1:1 oryginał)', 20, startY + 10);
-
-    const imgData = baseCanvas.toDataURL('image/png');
-    // Draw base image centered
-    const baseDim = parseInt(dimVal, 10) || 64;
-    const scaleFactor = Math.min(30 / baseDim, 1);
-    const drawW = baseDim * scaleFactor;
-    const drawH = baseDim * scaleFactor;
-
-    pdf.addImage(imgData, 'PNG', 25, startY + 16, drawW, drawH);
-
-    // Section 3: Previews (1:1, 16:9, 9:16)
-    const prevY = startY + 55;
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(255, 255, 255);
-    pdf.text('Podglądy skalowania w proporcjach', 20, prevY);
-
-    const p1 = canvas1x1.toDataURL('image/png');
-    const p2 = canvas16x9.toDataURL('image/png');
-    const p3 = canvas9x16.toDataURL('image/png');
-
-    // 1:1 Image
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(148, 163, 184);
-    pdf.text('Format 1:1 (160×160)', 25, prevY + 10);
-    pdf.addImage(p1, 'PNG', 25, prevY + 14, 40, 40);
-
-    // 16:9 Image
-    pdf.text('Format 16:9 (320×180)', 75, prevY + 10);
-    pdf.addImage(p2, 'PNG', 75, prevY + 14, 60, 33.75);
-
-    // 9:16 Image
-    pdf.text('Format 9:16 (180×320)', 145, prevY + 10);
-    pdf.addImage(p3, 'PNG', 145, prevY + 14, 30, 53.33);
-
-    // CSS Snippet Section
-    const cssY = prevY + 75;
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(255, 255, 255);
-    pdf.text('Kod konfiguracyjny CSS', 20, cssY);
-
-    pdf.setFillColor(19, 27, 46);
-    pdf.rect(20, cssY + 5, 170, 25, 'F');
-    pdf.setFont('courier', 'normal');
-    pdf.setFontSize(9);
-    pdf.setTextColor(165, 243, 252);
-    pdf.text(`border-image-source: url('9slice-image.png');`, 25, cssY + 13);
-    pdf.text(`border-image-slice: ${inputSliceInset.value} fill;`, 25, cssY + 18);
-    pdf.text(`border-image-width: ${inputSliceInset.value}px;`, 25, cssY + 23);
-
-    // Save PDF
-    pdf.save(`9slice_spec_${dimVal}x${dimVal}.pdf`);
+    const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = `9slice_${dim}x${dim}.svg`;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
   });
 
   // Initial Run
